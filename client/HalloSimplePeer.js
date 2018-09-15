@@ -123,7 +123,7 @@ module.exports = class HalloPeer extends HalloEventEmitter {
     }
 
     addTrack(track, stream) {
-        console.log('adding track', track);
+        log('adding track', track);
         //TODO this might not be right
         var sender = this._pc.addTrack(track, stream);
         var submap = this._senderMap.get(track) || new WeakMap();
@@ -176,7 +176,7 @@ module.exports = class HalloPeer extends HalloEventEmitter {
             }
         }
         if (data.renegotiate) {
-            console.log('got request to renogtiate');
+            log('got request to renogtiate');
             this._needsNegotiation()
         }
     }
@@ -221,19 +221,19 @@ module.exports = class HalloPeer extends HalloEventEmitter {
     }
 
     sendSignal(payload) {
-        console.log('SENDING SIGNAL', payload);
+        log('SENDING SIGNAL', payload);
         this.emit('signal', payload);
     }
 
     signal(payload) {
-        console.log('SIGNALING', payload);
+        log('SIGNALING', payload);
         this.emit(PUBLIC_EVENTS.incomingSignal, payload);
     }
 
     removeTrack(track, stream) {
         var submap = this._senderMap.get(track);
         var sender = submap ? submap.get(stream) : null;
-        console.log('GETTING SENDER???');
+        log('GETTING SENDER???');
         if (!sender) {
             throw 'gahhhhh';
         }

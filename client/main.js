@@ -4,7 +4,7 @@ var CallFinder = require('./CallFinder');
 
 const cf = new CallFinder();
 cf.on('stream', ({localStream, remoteStream}) => {
-  console.log('GOT THE STREAM!?!?!?');
+  log('GOT THE STREAM!?!?!?');
 
     var video1 = document.querySelector('#video1');
     video1.src = window.URL.createObjectURL(localStream);
@@ -13,7 +13,7 @@ cf.on('stream', ({localStream, remoteStream}) => {
     video.src = window.URL.createObjectURL(remoteStream)
     video.play()
 });
-console.log("here???");
+log("here???");
 // var Peer = require('./HalloSimplePeer');
 // //var Peer = require('simple-peer');
 
@@ -28,21 +28,21 @@ console.log("here???");
 //     window.peer2 = peer2;
 
 //   peer1.on('signal', function (data) {
-//       console.log('peer1 signal', data)
+//       log('peer1 signal', data)
 //     peer2.signal(data)
 //   })
 
 //   peer1.on('stream', stream => {
-//       console.log('peer1 stream', stream);
+//       log('peer1 stream', stream);
 //   })
 
 //   peer2.on('signal', function (data) {
-//     console.log('peer2 signal', data)
+//     log('peer2 signal', data)
 //     peer1.signal(data)
 //   })
 
 //   peer2.on('stream', function (stream) {
-//     console.log('peer2 stream', stream)
+//     log('peer2 stream', stream)
 //     // var video1 = document.querySelector('#video1');
 //     // video1.src = window.URL.createObjectURL(localStream);
 //     // video1.play();  

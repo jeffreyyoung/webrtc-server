@@ -29,7 +29,7 @@ module.exports = class CallFinder extends EventEmitter {
         });
         this.start();
         this.ws.on(QUEUE_SIZE, (data) => {
-            console.log('got the queue size!', data);
+            log('got the queue size!', data);
         });
     }
 

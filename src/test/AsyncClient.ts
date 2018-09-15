@@ -1,4 +1,5 @@
 import io from 'socket.io-client';
+import { logger } from './../logger';
 
 export class AsyncClient {
     url: string;
@@ -36,10 +37,10 @@ export class AsyncClient {
     }
 
     onceAsync(event, withTimeout = true): Promise<any> {
-        console.log('onceAsync', event);
+        logger.log('onceAsync', event);
         return new Promise((resolve, reject) => {
             this.socket.once(event, (...args) => {
-                console.log('resolve : ', event);
+                logger.log('resolve : ', event);
                 resolve(...args);
             });
             if (withTimeout) {
@@ -49,7 +50,7 @@ export class AsyncClient {
     }
 
     emit(...args) {
-        console.log('emit: ', ...args);
+        logger.log('emit: ', ...args);
         return this.socket.emit(...args);
     }
 

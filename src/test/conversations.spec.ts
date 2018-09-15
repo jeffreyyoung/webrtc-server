@@ -1,10 +1,11 @@
 import 'jest';
 import { getServer } from '../Server';
 import io from 'socket.io-client';
-import { AsyncClient } from './AsyncClient.spec';
+import { AsyncClient } from '../AsyncClient';
 import { rejects } from 'assert';
 import { defaultHalloState } from '../ConversationsManager';
 import { getRandomId } from '../randomId';
+import { logger } from '../logger';
 
 //https://jestjs.io/docs/en/configuration.html
 
@@ -38,7 +39,7 @@ describe('test server', () => {
         });
 
         //catch success events
-        let onConversationCandidate = s.onceAsync('conversation-candidate-found')
+        let onConversationCandidate = s.onceAsync('conversation-candidate-found', false)
         let onDecision = s.onceManyAsync('joined-conversation', 'candidate-canceled');
 
         //join the queue
@@ -46,9 +47,7 @@ describe('test server', () => {
 
         //found a candidate
         await onConversationCandidate;
-
-        //tell them we accept the candidate
-        let res = await s.emitAndAwait('accept-conversation-candidate');
+        let res = await s.emitAndAwait('accept-conversation-candidate', {}, false);
         let [event, payload] = await onDecision;
         //return the result
         return {
@@ -56,6 +55,8 @@ describe('test server', () => {
             payload,
             socket: s
         };
+            
+        //tell them we accept the candidate
     }
 
     //setup the server before running these tests
@@ -75,7 +76,7 @@ describe('test server', () => {
 
     //close the default socket
     afterEach(async () => {
-        console.log('after each!');
+        logger.log('after each!');
         await socket.disconnect();
     });
 
@@ -129,7 +130,7 @@ describe('test server', () => {
             .toEqual({queueSize: 0});
 
         s.emit('join-queue');
-        console.log('here');
+        logger.log('here');
         expect(await s.emitAndAwait('queue-size'))
         .toEqual({queueSize: 1});
 
@@ -225,7 +226,7 @@ describe('test server', () => {
             await socket.emitAndAwait('queue-size')
         ).toEqual({queueSize: 1});
 
-        console.log('states', await Promise.all(
+        logger.log('states', await Promise.all(
             [s1,s2,s3].map(s => s.emitAndAwait('user-info'))
         ));
 
@@ -301,27 +302,80 @@ describe('test server', () => {
             .toEqual({queueSize: 0});
     },7000);
 
-    it.only('should handle load', async () => {
-        const results = await Promise.all(Array(100).fill(null).map(i => getEagerSocket()));
+    it('should handle load', async () => {
+        const numEagers = 60;
+        const eager = await Promise.all(Array(numEagers).fill(null).map(i => getEagerSocket()));
+        wait(1000);
+        let stats = await socket.emitAndAwait('server-stats');
+        expect(stats)
+            .toEqual({
+                queueSize: 0,
+                numConversations: numEagers/2,
+                numCandidateConversations: 0
+            });
+
+        await Promise.all(
+            eager.map(f => f.socket.emitAndAwait('leave-conversation'))
+        );
+
+        wait(1000);
+
+        let stats1 = await socket.emitAndAwait('server-stats');
+        expect(stats1)
+            .toEqual({
+                queueSize: 0,
+                numConversations: 0,
+                numCandidateConversations: 0
+            });
         
-        await socket.emitAndAwait('authenticate', {userId: 'meowwww'});
-        await socket.emitAndAwait('join-queue');
+        await Promise.all(
+            eager.map(f => f.socket.disconnect())
+        );
+    }, 150000);
+
+    it('should handle odd number of eager clients', async () => {
+        const eagers = Array(3).fill(null).map(i => getEagerSocket());
+
+        await Promise.all(eagers.slice(0,1));
 
         let stats = await socket.emitAndAwait('server-stats');
-        
+
         expect(stats)
             .toEqual({
                 queueSize: 1,
-                numConversations: 50,
+                numConversations: 1,
                 numCandidateConversations: 0
             });
-        await Promise.all(results.map(s => s.socket.disconnect()));
-    }, 15000);
+
+        await getEagerSocket();
+        let stats1 = await socket.emitAndAwait('server-stats');
+
+        expect(stats1)
+            .toEqual({
+                queueSize: 0,
+                numConversations: 2,
+                numCandidateConversations: 0
+            });
+
+    },20000);
 
     afterAll(() => {
-        console.log('closing server');
+        logger.log('closing server');
         server.close();
     });
-})
+});
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+process.on('unhandledRejection', async (reason, p) => {
+    console.trace('Unhandled Rejection at:', p, 'reason:', reason);
+    try {
+        let j = await p;
+        console.log('here is j: ', j);
+    } catch (e) {
+        console.log('promise rejected', e);
+    }
+    
+    
+    // application specific logging, throwing an error, or other logic here
+ });

@@ -73,13 +73,9 @@ export class ConversationsManager {
 
     putUsersInConversation(socketsIn: HalloWebSocket[], conversationId: string) {
         let sockets = [...socketsIn];
-
-        sockets.forEach(s => {
-            if (s.halloState.conversationId) {
-                this.removeUserFromConversation(s);
-            }
-        });
-
+        if (sockets[0].halloState.conversationId && this.candidateConversations[sockets[0].halloState.conversationId || '']) {
+            throw 'WE SHOULD NOEVER BE HERE!!!!!!!!!!!'
+        }
         sockets.forEach(s => {
             Object.assign(s.halloState, {
                 ...defaultHalloState,

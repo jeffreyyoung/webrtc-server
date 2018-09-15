@@ -6,6 +6,15 @@ import { HalloWebSocket, ConversationsManager, defaultHalloState, initialHalloSt
 import { QueueManager } from './QueueManager';
 import { getRandomId } from './randomId';
 import { emit } from 'cluster';
+import { logger } from './logger';
+
+var memwatch = require('memwatch-next');
+
+memwatch.on('leak', function(info) {
+    console.log('LEAK!!!!', info);
+});
+
+//memwatch.on('stats', function(stats) { console.log('stats!!!!', stats); });
 
 
 export function getServer() {
@@ -27,6 +36,7 @@ export function getServer() {
 
 
 const AcceptCandidateTimeout = 4000;
+
 function getConnectionHandler() {
     const conversationManager = new ConversationsManager();
     
@@ -44,16 +54,16 @@ function getConnectionHandler() {
 
                 let timeOutId = setTimeout(() => {
                     s.removeListener('accept-conversation-candidate', fn);
-                    console.log('rejecting promise');
+                    logger.log('rejecting promise');
                     reject('timeout'), AcceptCandidateTimeout
                 }, AcceptCandidateTimeout);
 
 
                 let fn = (payload) => {
-                    console.log('clearing timeout id!!!');
+                    logger.log('clearing timeout id!!!');
                     clearTimeout(timeOutId);
                     s.halloState.hasAcceptedCandidate = true;
-                    console.log('emitting')
+                    logger.log('emitting')
                     s.emit('accept-conversation-candidate', s.halloState);
                     resolve(true);
                 };
@@ -71,31 +81,38 @@ function getConnectionHandler() {
             //put them in a conversation and let the users know they
             //are now part of a conversation
             await Promise.all(acceptedCandidatePromises);
-            log('GOT INTO THE CONVERSATION!!!', convo.length);
+            logger.log('GOT INTO THE CONVERSATION!!!', convo.length);
             //put them in a conversation!!!
             conversationManager.removeCandidateConversation(convo[0].halloState.conversationId);
             conversationManager.putUsersInConversation(convo, getRandomId());
             
             convo.forEach(s => {
-                log('emitting!!!!', 'joined-conversation');
+                logger.log('emitting!!!!', 'joined-conversation');
                 s.emit('joined-conversation', s.halloState);
+                if (s.halloState.conversationId) {
+                    if (!conversationManager.conversations[s.halloState.conversationId]) {
+                        console.log('WE SHULD NEVER BE HERE!!!!!');
+                    } else {
+                        console.log('all goodl');
+                    }
+                } 
             });
             //now wait for a user to say the end conversation before ending
         } catch (e) {
-            console.log('rejected!!!!');
+            logger.log('rejected!!!!');
             //either only one or neither of the users accepted the conversation candidate
             convo.forEach(s => {
-                console.log('checking if has accepted', s.halloState.userId);
+                logger.log('checking if has accepted', s.halloState.userId);
                 let accepted = s.halloState.hasAcceptedCandidate;
                 conversationManager.removeUserFromConversation(s);
 
                 //if this user accepted the conversation we should add them back to the front
                 //of the queue so that they can be put into a different conversation
                 if (accepted) {
-                    console.log('adding a dude to the front', s.halloState.userId);
+                    logger.log('adding a dude to the front', s.halloState.userId);
                     queueManager.addToFront(s);
                 } else {
-                    console.log('removing from conversation', s.halloState.userId);
+                    logger.log('removing from conversation', s.halloState.userId);
                     //if they didn't accept, we assume there's network problems and remove them from the queue
                     //they can re-enter once they have a connection
                     conversationManager.removeUserFromConversation(s);
@@ -105,7 +122,7 @@ function getConnectionHandler() {
                 //let the users know that the candidate did not work out
                 //and let them know their current state. ie. whether or not they are
                 //in the queue
-                console.log('emitting', 'candidate-canceled', s.halloState.userId);
+                logger.log('emitting', 'candidate-canceled', s.halloState.userId);
                 s.emit('candidate-canceled', s.halloState);
                 s.emit('user-info', {
                     ...s.halloState
@@ -114,29 +131,37 @@ function getConnectionHandler() {
         }
     });
 
-    function log(...args) {
-        console.log('server: ', ...args);
-    }
+
+    // setInterval(async () => {
+    //     console.log(Object.keys(conversationManager.conversations));
+    //     console.log({
+    //         queueSize: queueManager.getNumInQueue(),
+    //         numConversations: conversationManager.getNumConversations(),
+    //         numCandidateConversations: conversationManager.getNumConversationCandidates()
+    //     });
+    //     console.log('------------------');
+        
+    // }, 500);
 
     return function onConnect(socket: HalloWebSocket) {
         socket.halloState = {...initialHalloState};
 
         //clients can authenticate to associate a socket with a user
         socket.on('authenticate', ({userId}) => {
-            log('authenticate', {userId});
+            logger.log('authenticate', {userId});
             socket.halloState.userId = userId;
             socket.emit('authenticate', {userId});
         });
     
         //just for testing
         socket.on('echo', (payload) => {
-            log('echo', payload);
+            logger.log('echo', payload);
             socket.emit('echo', payload);
         });
     
         //a socket can request the current state of their socket eg isInQueue, conversationId, isInCandidate,
         socket.on('user-info', (payload) => {
-            log('user-info', payload);
+            logger.log('user-info', payload);
             socket.emit('user-info', {
                 ...socket.halloState,
             });
@@ -144,14 +169,14 @@ function getConnectionHandler() {
     
         //sockets can request the current queue size
         socket.on('queue-size', () => {
-            log('queue-size');
+            logger.log('queue-size');
             socket.emit('queue-size', {
                 queueSize: queueManager.getNumInQueue()
             });
         });
 
         socket.on('server-stats', () => {
-            log('server-stats');
+            logger.log('server-stats');
             socket.emit('server-stats', {
                 queueSize: queueManager.getNumInQueue(),
                 numConversations: conversationManager.getNumConversations(),
@@ -161,20 +186,20 @@ function getConnectionHandler() {
     
         //sockets can request to join the queue
         socket.on('join-queue', () => {
-            log('join-queue');
+            logger.log('join-queue');
             queueManager.addToQueue(socket);
             socket.emit('join-queue');
         });
     
         //sockets can request to leave the queue
         socket.on('leave-queue', () => {
-            log('leave-queue');
+            logger.log('leave-queue');
             queueManager.removeFromQueue(socket);
             socket.emit('leave-queue');
         });
 
         socket.on('leave-conversation', () => {
-            log('leave-conversation');
+            logger.log('leave-conversation');
 
             let convoAttendees = conversationManager.getConversationOfUser(socket);
             convoAttendees.forEach(s => {
@@ -199,7 +224,6 @@ function asyncOnce(socket: HalloWebSocket, event: string) {
         socket.once(event, (args) => resolve(...args));
     });
 }
-
 
 
 

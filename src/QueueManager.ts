@@ -1,4 +1,5 @@
 import { HalloWebSocket } from "./ConversationsManager";
+import { logger } from "./logger";
 
 export class QueueManager {
     private queue: HalloWebSocket[] = [];
@@ -12,12 +13,13 @@ export class QueueManager {
         s.halloState.isInQueue = true;
         this.queue.unshift(s);
         this.onAdd();
+        
     }
 
     addToQueue(s: HalloWebSocket) {
         s.halloState.isInQueue = true;
         this.queue.push(s);
-        console.log('added to queue',this.getNumInQueue());
+        logger.log('added to queue',this.getNumInQueue());
         this.onAdd();
     }
 
