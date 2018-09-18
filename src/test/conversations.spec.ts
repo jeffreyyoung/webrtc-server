@@ -303,7 +303,7 @@ describe('test server', () => {
     },7000);
 
     it('should handle load', async () => {
-        const numEagers = 60;
+        const numEagers = 100;
         const eager = await Promise.all(Array(numEagers).fill(null).map(i => getEagerSocket()));
         wait(1000);
         let stats = await socket.emitAndAwait('server-stats');

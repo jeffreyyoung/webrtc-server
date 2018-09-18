@@ -34,7 +34,7 @@ export function getServer() {
     return httpServer;
 }
 
-
+//something is messed up with this
 const AcceptCandidateTimeout = 4000;
 
 function getConnectionHandler() {
