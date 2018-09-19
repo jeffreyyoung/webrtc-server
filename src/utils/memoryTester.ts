@@ -1,5 +1,5 @@
 import { getRandomId } from "./randomId";
-import { AsyncClient } from "./AsyncClient";
+import { AsyncClient } from "../client/AsyncClient";
 
 
 const batch_size = 3;

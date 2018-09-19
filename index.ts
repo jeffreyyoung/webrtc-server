@@ -1,6 +1,8 @@
-import { getServer } from "./src/Server";
+import { getServer } from "./src/server/getServer";
 
-const server = getServer();
+async function main() {
+    const dress = await getServer(1234);
+}
 
-//TODO add 0.0.0 thing here
-server.listen(process.env.port || 4321);
+main();
+

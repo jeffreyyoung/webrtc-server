@@ -1,26 +1,18 @@
+/*
+
 import 'jest';
-import { getServer } from '../Server';
+import { getServer } from '../server/getServer';
 import io from 'socket.io-client';
-import { AsyncClient } from '../AsyncClient';
+import { AsyncClient } from '../client/AsyncClient';
 import { rejects } from 'assert';
-import { defaultHalloState } from '../ConversationsManager';
-import { getRandomId } from '../randomId';
-import { logger } from '../logger';
+import { getRandomId } from '../utils/randomId';
+import { logger } from '../utils/logger';
 
 //https://jestjs.io/docs/en/configuration.html
 
 const port = 1111;
 
-const defaultState = {
-    userId: '',
-    isInCandidate: false,
-    isInConversation: false,
-    conversationId: '',
-    isInQueue: false,
-    hasAcceptedCandidate: false
-};
-
-describe('test server', () => {
+describe('should function with just one server', () => {
     let server;
     let httpServerAddr;
     let socket: AsyncClient;
@@ -67,17 +59,6 @@ describe('test server', () => {
             httpServerAddr = s.address();
             done();
         })
-    });
-
-    //create a default socket to be used before each test
-    beforeEach(async () => {
-        socket = await getSocket();
-    });
-
-    //close the default socket
-    afterEach(async () => {
-        logger.log('after each!');
-        await socket.disconnect();
     });
 
     it('should be able to connect', async () => {
@@ -379,3 +360,5 @@ process.on('unhandledRejection', async (reason, p) => {
     
     // application specific logging, throwing an error, or other logic here
  });
+
+ */
