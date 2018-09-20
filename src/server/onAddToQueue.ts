@@ -5,13 +5,17 @@ import { getRandomId } from "../utils/randomId";
 import { Completable } from "../utils/Completable";
 import { promises } from "fs";
 import { socketEvents } from "./socketEvents";
+import { logger } from "../utils/logger";
 
 export function getOnAddToQueueFunction(queueManager: QueueManager, roomManager: RoomManager, conversationManager: ConversationManager) {
 
     return async () => {
+        logger.server('checking for a conversation');
         let convo = await queueManager.popFrontTwo();
         if (!convo) {return;}
+        logger.server('found a conversation', convo);
         let acceptResult = await doUsersAcceptConversation(convo, roomManager);
+        logger.server('accept result', acceptResult);
         if (acceptResult.accepted) {
             //put users in conversation
             putUsersInConversation(convo, acceptResult.conversationId, roomManager);
@@ -44,25 +48,28 @@ type doUsersAcceptConversationResult = {
 }
 
 async function handleRejectedConversation(userAccepts: UserAccept[], roomManager: RoomManager, queueManager: QueueManager) {
+    logger.server('accept result', 'handleRejectedConversation');
     userAccepts.forEach(ua => {
         if (ua.accepted) {
             //this user accepted add them to the front of the queue
             queueManager.addToFront(ua.userId);
             roomManager.emitTo(ua.userId, {
-                event: socketEvents.candidateRejected,
+                event: socketEvents.candidateResult,
                 from: 'god',
                 to: ua.userId,
                 payload: {
+                    joinedConversation: false,
                     isInQueue: true
                 }
             })
         } else {
             //this user did not accept, do not put them in the queue
             roomManager.emitTo(ua.userId, {
-                event: socketEvents.candidateRejected,
+                event: socketEvents.candidateResult,
                 from: 'god',
                 to: ua.userId,
                 payload: {
+                    joinedConversation: false,
                     isInQueue: false
                 }
             });
@@ -71,12 +78,14 @@ async function handleRejectedConversation(userAccepts: UserAccept[], roomManager
 }
 
 async function putUsersInConversation(userIds: string[], conversationId: string, roomManager: RoomManager) {
+    logger.server('accept result', 'putUsersInConversation');
     userIds.forEach(userId => {
         roomManager.emitTo(userId, {
             from: 'god',
             to: userId,
-            event: socketEvents.joinedConveration,
+            event: socketEvents.candidateResult,
             payload: {
+                joinedConversation: true,
                 conversationId
             }
         });
@@ -86,6 +95,7 @@ async function putUsersInConversation(userIds: string[], conversationId: string,
 async function doUsersAcceptConversation(userIds: string[], roomManager: RoomManager) {
     const TIMEOUT = 10000; //yall have ten seconds to accept
     return new Promise<doUsersAcceptConversationResult>(async (resolve,reject) => {
+        logger.server('checking if both users accept');
         let conversationId = getRandomId();
         let hasRejected = false;
         let didAccepts = [
@@ -95,6 +105,7 @@ async function doUsersAcceptConversation(userIds: string[], roomManager: RoomMan
 
         //if the users dont accept in time we gotta reject
         setTimeout(() => {
+            console.log('timeout!', false);
             didAccepts[0].resolve({accepted: false});
             didAccepts[1].resolve({accepted: false});
         }, TIMEOUT);
@@ -133,96 +144,3 @@ async function doUsersAcceptConversation(userIds: string[], roomManager: RoomMan
         });
     });
 }
-/*
-const queueManager = new QueueManager(async () => {
-    let convo = await queueManager.popFrontTwo();
-
-    if (!convo) { return; }
-    
-    conversationManager.putUsersInCandidateConversation(convo);
-
-    //this handles whether the users accept the conversation
-    let acceptedCandidatePromises = convo.map(s => {
-        return new Promise((resolve, reject) => {
-
-            let timeOutId = setTimeout(() => {
-                s.removeListener('accept-conversation-candidate', fn);
-                logger.log('rejecting promise');
-                reject('timeout'), AcceptCandidateTimeout
-            }, AcceptCandidateTimeout);
-
-
-            let fn = (payload) => {
-                logger.log('clearing timeout id!!!');
-                clearTimeout(timeOutId);
-                s.halloState.hasAcceptedCandidate = true;
-                logger.log('emitting')
-                s.emit('accept-conversation-candidate', s.halloState);
-                resolve(true);
-            };
-            s.once('accept-conversation-candidate', fn);
-
-        });
-    });
-    
-    //tells the two users that there is a possible conversation for them
-    //we need to hear back from them to make sure they are still online
-    //we will give them 10 seconds to respond
-    convo.forEach(c => c.emit('conversation-candidate-found'));
-    try {
-        //both of the users accepted the invitation
-        //put them in a conversation and let the users know they
-        //are now part of a conversation
-        await Promise.all(acceptedCandidatePromises);
-        logger.log('GOT INTO THE CONVERSATION!!!', convo.length);
-        //put them in a conversation!!!
-        conversationManager.removeCandidateConversation(convo[0].halloState.conversationId);
-        conversationManager.putUsersInConversation(convo, getRandomId());
-        
-        convo.forEach(s => {
-            logger.log('emitting!!!!', 'joined-conversation');
-            s.emit('joined-conversation', s.halloState);
-            if (s.halloState.conversationId) {
-                if (!conversationManager.conversations[s.halloState.conversationId]) {
-                    console.log('WE SHULD NEVER BE HERE!!!!!');
-                } else {
-                    console.log('all goodl');
-                }
-            } 
-        });
-        //now wait for a user to say the end conversation before ending
-    } catch (e) {
-        logger.log('rejected!!!!');
-        //either only one or neither of the users accepted the conversation candidate
-        convo.forEach(s => {
-            logger.log('checking if has accepted', s.halloState.userId);
-            let accepted = s.halloState.hasAcceptedCandidate;
-            conversationManager.removeUserFromConversation(s);
-
-            //if this user accepted the conversation we should add them back to the front
-            //of the queue so that they can be put into a different conversation
-            if (accepted) {
-                logger.log('adding a dude to the front', s.halloState.userId);
-                queueManager.addToFront(s);
-            } else {
-                logger.log('removing from conversation', s.halloState.userId);
-                //if they didn't accept, we assume there's network problems and remove them from the queue
-                //they can re-enter once they have a connection
-                conversationManager.removeUserFromConversation(s);
-                
-            }
-
-            //let the users know that the candidate did not work out
-            //and let them know their current state. ie. whether or not they are
-            //in the queue
-            logger.log('emitting', 'candidate-canceled', s.halloState.userId);
-            s.emit('candidate-canceled', s.halloState);
-            s.emit('user-info', {
-                ...s.halloState
-            });
-        });
-    }
-});
-
-
-*/

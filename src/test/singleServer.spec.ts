@@ -46,29 +46,40 @@ describe('one server', () => {
             person.emit(socketEvents.acceptCandidate, payload);
         });
 
-        let onConversation = person.onceAsync(socketEvents.joinedConveration);
+        let onConversation = person.onceAsync(socketEvents.candidateResult);
         let joinedQueue = await person.emitAndAwait(socketEvents.joinQueue, {});
         let result = await onConversation;
         await person.disconnect();
         return result;
     }
 
-    class EagerSocket {
+    class EagerPerson {
         socket: AsyncClient;
+
         constructor() {
             this.socket = new AsyncClient(`ws://${httpServerAddr.address}:${httpServerAddr.port}`);
         }
 
-        async start() {
+        async connect() {
             await this.socket.connect();
-            let s = this.socket;
-            s.once(socketEvents.conversationCandidate, (payload) => {
-                s.emit(socketEvents.acceptCandidate, payload);
+        }
+
+        async authenticate(id = getRandomId()) {
+            await this.socket.emitAndAwait(socketEvents.authenticate, {userId: getRandomId()});
+        }
+
+        async findPartner(joinQueue = true) {
+            
+            this.socket.once(socketEvents.conversationCandidate, (payload) => {
+                this.socket.emit(socketEvents.acceptCandidate, payload);
             });
     
-            let onConversation = s.onceAsync(socketEvents.joinedConveration);
-            let joinedQueue = await s.emitAndAwait(socketEvents.joinQueue, {});
+            let onConversation = this.socket.onceAsync(socketEvents.candidateResult);
+            if (joinQueue) {
+                let joinedQueue = await this.socket.emitAndAwait(socketEvents.joinQueue, {});
+            }
             let result = await onConversation;
+            return result;
         }
     }
 
@@ -118,18 +129,6 @@ describe('one server', () => {
     });
 
     describe('match making', () => {
-        async function eagerPerson() {
-            let s = await getSocket();
-            await s.emitAndAwait(socketEvents.authenticate, {userId: ''+getRandomId()});
-            s.on(socketEvents.conversationCandidate, async (args) => {
-                const {conversationId} = await s.emitAndAwait(socketEvents.acceptCandidate,args);
-            });
-
-            let getConversatonId = s.onceAsync('join')
-            await s.emitAndAwait(socketEvents.joinQueue);
-            
-        }
-
         test('happy path should work', async () => {
             let person1 = await getSocket();
             let person2 = await getSocket();
@@ -139,28 +138,51 @@ describe('one server', () => {
 
             //once they get a candidate accept
             person1.once(socketEvents.conversationCandidate, (payload) => {
+                console.log('accepting candidate');
                 person1.emit(socketEvents.acceptCandidate, payload);
             });
             person2.once(socketEvents.conversationCandidate, (payload) => {
+                console.log('wat is going on?????');
                 person2.emit(socketEvents.acceptCandidate, payload);
             });
 
-            let onConversation1 = person1.onceAsync(socketEvents.joinedConveration);
-            let onConversation2 = person2.onceAsync(socketEvents.joinedConveration);
-
+            let onConversation1 = person1.onceAsync(socketEvents.candidateResult);
+            let onConversation2 = person2.onceAsync(socketEvents.candidateResult);
+            console.log('here????', onConversation1);
             person1.emit(socketEvents.joinQueue, {});
             person2.emit(socketEvents.joinQueue, {});
 
             let results = await Promise.all([onConversation1, onConversation2]);
+            console.log('results');
             let {queueSize} = await defaultSocket.emitAndAwait(socketEvents.queueSize, {});
+            console.log('queueSize', queueSize);
             expect(queueSize).toBe(0);
             expect(results[0].conversationId).toBe(results[1].conversationId);
             await Promise.all([person1.disconnect(), person2.disconnect()]);
         });
 
+        test('eager candidates should work', async () => {
+            let p1 = getEagerSocket();
+            let p2 = getEagerSocket();
+
+            let results = await Promise.all([p1, p2]);
+            const conversationId = results[0].conversationId;
+
+            expect(conversationId).toBeTruthy();
+            expect(results[0]).toEqual({
+                conversationId,
+                joinedConversation: true
+            });
+            expect(results[1]).toEqual({
+                conversationId,
+                joinedConversation: true
+            });
+        });
+
         test('100 users should find matches in under 5 seconds', async () => {
+            const numPeople = 100;
             let results = await Promise.all(
-                Array(300).fill(null).map(() => getEagerSocket())
+                Array(numPeople).fill(null).map(() => getEagerSocket())
             );
             let conversationCounts = {};
             results.forEach(res => {
@@ -169,19 +191,41 @@ describe('one server', () => {
                 }
                 conversationCounts[res.conversationId] = conversationCounts[res.conversationId] + 1;
             });
-            validateConversationCounts(conversationCounts, 150);
-        }, 7500);
+            validateConversationCounts(conversationCounts, numPeople/2);
+        }, 10000);
 
-        test('should handle 3 users', async () => {
-            //TODO fix this test
-            let users = Array(3).fill(null).map(meh => new EagerSocket());
-            let promises = users.map(u => u.start());
+        test.only('the disconnected user path should work', async () => {
+            const p1 = new EagerPerson();
+            let person2 = await getSocket();
 
-            let results = await Promise.all([promises[0], promises[1]]);
-            validateResults(results);
+            await p1.connect();
+            await p1.authenticate();
+            let findResult = p1.findPartner();
 
+            await person2.emitAndAwait(socketEvents.authenticate, {userId: '2'});
 
-        });
+            let didGetConversationCandidateOffer = false;
+            person2.once(socketEvents.conversationCandidate, (payload) => {
+                didGetConversationCandidateOffer = true;
+            });
+
+            let result2 = person2.onceAsync(socketEvents.candidateResult);
+
+            person2.emit(socketEvents.joinQueue, {});
+
+            let results = await Promise.all([findResult, result2]);
+            let {queueSize} = await defaultSocket.emitAndAwait(socketEvents.queueSize, {});
+            expect(queueSize).toBe(1);
+            expect({
+                joinedConversation: false,
+                isInQueue: true
+            }).toEqual(results[0]);
+            expect({
+                joinedConversation: false,
+                isInQueue: false
+            }).toEqual(results[1]);
+            await person2.emitAndAwait(socketEvents.leaveQueue);
+        }, 15000);
     });
 });
 

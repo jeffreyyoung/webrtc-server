@@ -1,10 +1,9 @@
 export const socketEvents = {
-    candidateRejected: 'candidateRejected',
     joinQueue: 'joinQueue',
     acceptCandidate: 'acceptCandidate',
     leaveQueue: 'leaveQueue',
     conversationCandidate: 'conversationCandidate',
-    joinedConveration: 'joinedConversation',
+    candidateResult: 'candidateResult',
     connection: 'connection',
     authenticate: 'authenticate',
     userState: 'userState',

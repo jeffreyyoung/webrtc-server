@@ -45,6 +45,7 @@ export function getServer(port = 4321) {
     wss.on(socketEvents.connection, (ws: WebSocket) => {
         let hs = new HalloSocket(ws);
         hs.on(socketEvents.authenticate, (payload: any): void => {
+            logger.server('authenticate', payload.userId);
             //get token from payload
             //add user to room
             hs.state.userId = payload.userId;
